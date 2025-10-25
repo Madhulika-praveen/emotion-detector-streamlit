@@ -1,7 +1,11 @@
 import streamlit as st
 import os
+
+# ----------------- ENVIRONMENT FIXES -----------------
+# Prevent OpenCV from trying to use unavailable video backends on cloud
 os.environ["OPENCV_VIDEOIO_PRIORITY_MSMF"] = "0"
 os.environ["OPENCV_VIDEOIO_MSMF_ENABLE_HW_TRANSFORMS"] = "0"
+os.environ["OPENCV_OPENCL_RUNTIME"] = "disabled"
 
 import cv2
 from fer import FER
@@ -23,52 +27,15 @@ emoji_map = {
     "neutral": "😐"
 }
 
-# --- CSS ---
+# ----------------- CSS -----------------
 CUSTOM_CSS = """
 <style>
 #MainMenu, footer {visibility: hidden;}
 .page-content {margin-top: 60px;}
-
-/* Ribbon styling */
-.ribbon {
-    width: 100%;
-    background-color: #404040;
-    padding: 14px 20px;
-    display: flex;
-    align-items: baseline;
-    justify-content: flex-start;
-    color: white;
-    font-size: 55px;
-    font-weight: bold;
-}
-
-h1 { font-size: 38px; }
-h2 { font-size: 30px; }
-h3 { font-size: 26px; }
-p, span { font-size: 26px; }
-
-/* Calm down alert */
-.alert {
-    background-color: #ffcccc;
-    color: #b30000;
-    font-weight: bold;
-    text-align: center;
-    border-radius: 10px;
-    padding: 10px;
-    margin-top: 10px;
-    font-size: 24px;
-}
-
-/* Summary Panel */
-.summary {
-    background-color: #e6f7ff;
-    border: 2px solid #0099cc;
-    border-radius: 12px;
-    padding: 15px;
-    margin-top: 20px;
-    font-size: 22px;
-    color: #002b36;
-}
+.ribbon {width: 100%; background-color: #404040; padding: 14px 20px; display: flex; align-items: baseline; justify-content: flex-start; color: white; font-size: 55px; font-weight: bold;}
+h1 { font-size: 38px; } h2 { font-size: 30px; } h3 { font-size: 26px; } p, span { font-size: 26px; }
+.alert {background-color: #ffcccc; color: #b30000; font-weight: bold; text-align: center; border-radius: 10px; padding: 10px; margin-top: 10px; font-size: 24px;}
+.summary {background-color: #e6f7ff; border: 2px solid #0099cc; border-radius: 12px; padding: 15px; margin-top: 20px; font-size: 22px; color: #002b36;}
 </style>
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
@@ -110,16 +77,14 @@ with col2:
     st.markdown("<div style='margin-top: 75px;'></div>", unsafe_allow_html=True)
     chart = st.line_chart([])
 
-# ----------------- RESET FEEDBACK -----------------
 if process_video:
     st.session_state.user_feedback = None
     st.session_state.feedback_submitted = False
 
-# ----------------- VIDEO PROCESSING LOGIC -----------------
+# ----------------- VIDEO PROCESSING -----------------
 if uploaded_video and process_video:
     detector = FER(mtcnn=False)
 
-    # Save uploaded video temporarily
     tfile = tempfile.NamedTemporaryFile(delete=False)
     tfile.write(uploaded_video.read())
     camera = cv2.VideoCapture(tfile.name)
@@ -157,23 +122,18 @@ if uploaded_video and process_video:
 
             chart.line_chart(stress_values)
 
-            # Alert if stress > 25
             if stress > 25:
                 ALERT_BOX.markdown('<div class="alert">😟 Calm down! Take a deep breath.</div>', unsafe_allow_html=True)
             else:
                 ALERT_BOX.empty()
 
-            cv2.putText(frame, f"{dominant.upper()} | Stress: {stress}%", (30, 50),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        FRAME_WINDOW.image(frame)
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            FRAME_WINDOW.image(frame)
 
     camera.release()
 
 # ----------------- AFTER VIDEO PROCESSING -----------------
 if uploaded_video and not process_video:
-    # --- SESSION SUMMARY PANEL ---
     if st.session_state.stress_values or st.session_state.emotion_log:
         st.session_state.duration = int(time.time() - st.session_state.start_time) if st.session_state.start_time else st.session_state.duration
         st.session_state.start_time = None
@@ -196,7 +156,6 @@ if uploaded_video and not process_video:
         </div>
         """, unsafe_allow_html=True)
 
-        # ----------------- EMOTION DISTRIBUTION -----------------
         if st.session_state.emotion_log:
             emotion_counts = Counter(st.session_state.emotion_log)
             total = sum(emotion_counts.values())
@@ -207,33 +166,18 @@ if uploaded_video and not process_video:
             st.markdown("<h3 style='text-align: center; margin-top: 20px;'>📊 Emotion Distribution</h3>", unsafe_allow_html=True)
             st.bar_chart(df_emotions)
 
-    # ----------------- USER FEEDBACK -----------------
     st.markdown("<h3 style='text-align: center; margin-top: 20px;'>📝 Feedback</h3>", unsafe_allow_html=True)
-    st.markdown("""
-    <p style='text-align: center; font-size: 22px; color: #333;'>
-    Please select your current emotion(s) after this session.
-    </p>
-    """, unsafe_allow_html=True)
+    st.markdown("""<p style='text-align: center; font-size: 22px; color: #333;'>Please select your current emotion(s) after this session.</p>""", unsafe_allow_html=True)
 
     if not st.session_state.feedback_submitted:
-        user_emotions = st.multiselect(
-            "Your Emotion(s):",
-            ["Happy", "Sad", "Angry", "Surprised", "Fear", "Disgust", "Neutral"]
-        )
+        user_emotions = st.multiselect("Your Emotion(s):", ["Happy", "Sad", "Angry", "Surprised", "Fear", "Disgust", "Neutral"])
         if st.button("Submit Feedback") and user_emotions:
             st.session_state.user_feedback = user_emotions
             st.session_state.feedback_submitted = True
 
     if st.session_state.feedback_submitted:
         selected_emotions = ", ".join(st.session_state.user_feedback)
-        st.markdown(f"""
-        <p style='text-align: center; font-size: 22px; color: #007700; margin-top: 15px;'>
-        🙏 Thank you for your feedback!</b></p>
-        """, unsafe_allow_html=True)
-        st.markdown(f"""
-        <p style='text-align: center; font-size: 20px; color: #333; margin-top: 10px;'>
-        Upload a new video to begin a new session.
-        </p>
-        """, unsafe_allow_html=True)
+        st.markdown(f"<p style='text-align: center; font-size: 22px; color: #007700; margin-top: 15px;'>🙏 Thank you for your feedback!</p>", unsafe_allow_html=True)
+        st.markdown(f"<p style='text-align: center; font-size: 20px; color: #333; margin-top: 10px;'>Upload a new video to begin a new session.</p>", unsafe_allow_html=True)
 
 st.markdown('</div>', unsafe_allow_html=True)
